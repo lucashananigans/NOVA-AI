@@ -55,7 +55,7 @@ function webgpuOK(){return !!navigator.gpu}
 let webllm=null, modelRecords=[];
 async function getLibrary(){if(webllm)return webllm;webllm=await import('https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.89/lib/index.js');modelRecords=webllm.prebuiltAppConfig.model_list;return webllm}
 function smallModels(){return modelRecords.filter(m=>/360M|0\.5B|1B|1\.5B|2B/i.test(m.model_id))}
-const DEFAULT_MODEL_ID='Qwen2.5-0.5B-Instruct-q4f16_1-MLC';
+const DEFAULT_MODEL_ID='SmolLM2-360M-Instruct-q4f16_1-MLC';
 async function loadModel(id=DEFAULT_MODEL_ID){
  if(engine||generating)return;
  if(!webgpuOK()){
