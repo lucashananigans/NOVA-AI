@@ -2,26 +2,25 @@ const express = require("express");
 const path = require("path");
 const app = express();
 const PORT = process.env.PORT || 3000;
-const OLLAMA_URL = process.env.OLLAMA_URL || "http://127.0.0.1:11434";
+const HF_TOKEN = process.env.HF_TOKEN;
+const HF_MODEL = process.env.HF_MODEL || "Qwen/Qwen3-4B:cheapest";
+const HF_URL = "https://router.huggingface.co/v1/chat/completions";
 
 app.use(express.json({ limit: "1mb" }));
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(__dirname));
 
-app.get("/api/health", async (_req, res) => {
-  try {
-    const r = await fetch(`${OLLAMA_URL}/api/tags`);
-    if (!r.ok) throw new Error("Ollama unavailable");
-    const data = await r.json();
-    res.json({ ok: true, models: (data.models || []).map(m => m.name) });
-  } catch {
-    res.status(503).json({ ok: false, message: "Ollama is not running." });
-  }
+app.get("/api/health", (_req, res) => {
+  res.json({ ok: Boolean(HF_TOKEN), provider: "Hugging Face", model: HF_MODEL });
 });
 
 app.post("/api/chat", async (req, res) => {
-  const { messages, model } = req.body || {};
-  if (!Array.isArray(messages) || !messages.length)
+  const { messages } = req.body || {};
+  if (!Array.isArray(messages) || !messages.length) {
     return res.status(400).json({ error: "Please send a message." });
+  }
+  if (!HF_TOKEN) {
+    return res.status(503).json({ error: "NOVA's AI connection has not been configured by the site owner yet." });
+  }
 
   const safe = messages
     .filter(m => m && ["user", "assistant"].includes(m.role) && typeof m.content === "string")
@@ -29,24 +28,34 @@ app.post("/api/chat", async (req, res) => {
     .map(m => ({ role: m.role, content: m.content.slice(0, 12000) }));
 
   try {
-    const r = await fetch(`${OLLAMA_URL}/api/chat`, {
+    const r = await fetch(HF_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Authorization": "Bearer " + HF_TOKEN,
+        "Content-Type": "application/json"
+      },
       body: JSON.stringify({
-        model: typeof model === "string" && model.trim() ? model.trim() : "llama3.2:3b",
+        model: HF_MODEL,
         messages: [
           { role: "system", content: "You are NOVA, a helpful, clear, friendly personal AI assistant. Be accurate, explain uncertainty, and keep responses age-appropriate." },
           ...safe
         ],
+        max_tokens: 700,
         stream: false
       })
     });
     const data = await r.json().catch(() => ({}));
-    if (!r.ok) return res.status(r.status).json({ error: data.error || "The local model could not answer." });
-    res.json({ reply: data.message?.content || "I couldn't generate a response." });
-  } catch {
-    res.status(503).json({ error: "Cannot reach Ollama. Start Ollama on this computer and try again." });
+    if (!r.ok) {
+      return res.status(r.status).json({ error: data.error || "The AI provider could not answer. Check provider access and credits." });
+    }
+    const reply = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+    if (typeof reply !== "string") {
+      return res.status(502).json({ error: "The AI provider returned an unexpected response." });
+    }
+    res.json({ reply });
+  } catch (_error) {
+    res.status(502).json({ error: "Could not reach the AI provider. Please try again." });
   }
 });
 
-app.listen(PORT, () => console.log(`NOVA AI running at http://localhost:${PORT}`));
+app.listen(PORT, () => console.log("NOVA AI listening on port " + PORT));
