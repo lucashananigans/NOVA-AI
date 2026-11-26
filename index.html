@@ -95,6 +95,7 @@ load();if(!data.current||!data.chats.some(c=>c.id===data.current)){if(data.chats
 $('#deviceStatus').textContent=webgpuOK()?'✓ WebGPU available':'⚠ WebGPU not detected';
 if(data.model)$('#modelStatus').textContent='Starting NOVA…';
 if(!webgpuOK())$('#hint').textContent='WebGPU is required for local AI. Try a recent Chrome or Edge browser on a supported device.';
-if(data.memories?.length) { /* local memory is included with each chat */ }\nif(webgpuOK()) loadModel();
+if(data.memories?.length) { /* local memory is included with each chat */ }
+if(webgpuOK()) loadModel();
 </script>
 </body></html>
