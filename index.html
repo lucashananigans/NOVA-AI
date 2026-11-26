@@ -63,7 +63,8 @@ function showSettings(){modal('Settings & privacy','<p class="muted">NOVA runs i
 $('#composer').addEventListener('submit',e=>{e.preventDefault();const v=$('#prompt').value;$('#prompt').value='';$('#prompt').style.height='auto';send(v)});
 $('#prompt').addEventListener('input',()=>{$('#prompt').style.height='auto';$('#prompt').style.height=Math.min($('#prompt').scrollHeight,180)+'px';$('#send').disabled=!$('#prompt').value.trim()});
 $('#newChat').onclick=newChat;$('#modelsBtn').onclick=$('#topModels').onclick=showModels;$('#memoryBtn').onclick=showMemory;$('#settingsBtn').onclick=showSettings;$('#menuBtn').onclick=()=>$('#sidebar').classList.toggle('open');$('#modalBack').onclick=e=>{if(e.target===$('#modalBack'))closeModal()};
-if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});\nload();if(!data.current||!data.chats.some(c=>c.id===data.current)){if(data.chats[0])data.current=data.chats[0].id}renderList();renderChat();
+if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+load();if(!data.current||!data.chats.some(c=>c.id===data.current)){if(data.chats[0])data.current=data.chats[0].id}renderList();renderChat();
 $('#deviceStatus').textContent=webgpuOK()?'✓ WebGPU available':'⚠ WebGPU not detected';
 if(data.model)$('#modelStatus').textContent='Saved: '+data.model;
 if(!webgpuOK())$('#hint').textContent='WebGPU is required for local AI. Try a recent Chrome or Edge browser on a supported device.';
