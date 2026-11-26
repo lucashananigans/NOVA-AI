@@ -21,14 +21,14 @@
   <div class="section">Your conversations</div>
   <div class="chats" id="chatList"></div>
   <div class="sidebottom">
-    <button class="sidebtn" id="modelsBtn">🧠 &nbsp;AI models</button>
+    
     <button class="sidebtn" id="memoryBtn">✧ &nbsp;Memory</button>
     <button class="sidebtn" id="settingsBtn">⚙ &nbsp;Settings & privacy</button>
     <div class="status" id="deviceStatus">Checking device support…</div>
   </div>
 </aside>
 <main class="main">
-  <header class="top"><button class="iconbtn" id="menuBtn" aria-label="Open menu">☰</button><span class="topname">NOVA</span><span class="pill" id="modelStatus">No model loaded</span><span class="grow"></span><button class="iconbtn" id="topModels">Choose model</button></header>
+  <header class="top"><button class="iconbtn" id="menuBtn" aria-label="Open menu">☰</button><span class="topname">NOVA</span><span class="pill" id="modelStatus">No model loaded</span><span class="grow"></span></header>
   <section class="content" id="content"><div class="thread" id="thread"></div></section>
   <div class="composer-wrap"><form class="composer" id="composer"><textarea id="prompt" rows="1" placeholder="Message NOVA…" aria-label="Message NOVA"></textarea><button class="send" id="send" type="submit" disabled>↑</button></form><div class="hint" id="hint">Your messages stay on this device. AI runs locally in your browser.</div></div>
 </main>
@@ -55,19 +55,46 @@ function webgpuOK(){return !!navigator.gpu}
 let webllm=null, modelRecords=[];
 async function getLibrary(){if(webllm)return webllm;webllm=await import('https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.89/lib/index.js');modelRecords=webllm.prebuiltAppConfig.model_list;return webllm}
 function smallModels(){return modelRecords.filter(m=>/360M|0\.5B|1B|1\.5B|2B/i.test(m.model_id))}
-function showModels(){modal('Choose an on-device model','<p class="muted">Models run on your device. Smaller models usually load faster but may be less capable. The first load downloads model data into your browser cache.</p><div id="modelList">Loading available models…</div><div class="progress"><i id="loadBar"></i></div><p class="muted" id="loadText"></p>','');getLibrary().then(lib=>{const list=smallModels();$('#modelList').innerHTML='';list.slice(0,12).forEach(m=>{const row=document.createElement('div');row.className='modelrow';const info=document.createElement('div');info.innerHTML='<b>'+m.model_id+'</b><small>Runs locally in this browser</small>';const btn=document.createElement('button');btn.textContent=data.model===m.model_id?'Selected':'Load';btn.onclick=()=>loadModel(m.model_id);row.append(info,btn);$('#modelList').append(row)});if(!list.length)$('#modelList').textContent='No small prebuilt models were found.'}).catch(e=>{$('#modelList').textContent='Could not load model list: '+e.message})}
-async function loadModel(id){if(!webgpuOK()){toast('This browser or device does not support WebGPU.');return}try{const lib=await getLibrary();$('#loadText').textContent='Preparing '+id+'… Keep this tab open.';const bar=$('#loadBar');engine=await lib.CreateMLCEngine(id,{initProgressCallback:p=>{if(bar)bar.style.width=Math.round((p.progress||0)*100)+'%';const tx=$('#loadText');if(tx)tx.textContent=p.text||'Downloading model…'}});data.model=id;save();$('#modelStatus').textContent=id;$('#loadText').textContent='Model ready. NOVA is running on your device.';toast('NOVA is ready!');$('#hint').textContent='Model ready · Your messages stay on this device.'}catch(e){engine=null;$('#loadText').textContent='Could not load model: '+e.message;toast('Model could not be loaded')}}
-async function send(text){text=text.trim();if(!text||generating)return;if(!engine){toast('Choose and load a model first.');showModels();return}const c=current()||(()=>{newChat();return current()})();if(!c.messages.length)c.title=text.slice(0,42);c.messages.push({role:'user',content:text});save();renderChat();const answer=addMsg('assistant','');const memoryText=(data.memories||[]).length?'\\nRemembered facts about the user (stored locally):\\n'+data.memories.join('\\n') : '';const history=[{role:'system',content:'You are NOVA, a helpful personal AI. Be clear, accurate, friendly, and age-appropriate. The user values simple explanations.'+memoryText},...c.messages.map(m=>({role:m.role,content:m.content}))];generating=true;$('#send').disabled=true;$('#hint').textContent='NOVA is thinking on your device…';try{const stream=await engine.chat.completions.create({messages:history,stream:true,temperature:0.7,max_tokens:700});let reply='';for await(const part of stream){reply+=part.choices?.[0]?.delta?.content||'';answer.textContent=reply;$('#content').scrollTop=$('#content').scrollHeight}c.messages.push({role:'assistant',content:reply});save()}catch(e){answer.textContent='Something went wrong: '+e.message}finally{generating=false;$('#send').disabled=!engine;$('#hint').textContent='Your messages stay on this device. AI runs locally in your browser.';$('#content').scrollTop=$('#content').scrollHeight}}
+const DEFAULT_MODEL_ID='Qwen2.5-0.5B-Instruct-q4f16_1-MLC';
+async function loadModel(id=DEFAULT_MODEL_ID){
+ if(engine||generating)return;
+ if(!webgpuOK()){
+   $('#modelStatus').textContent='Unsupported browser';
+   $('#hint').textContent='This browser/device does not support WebGPU. Try a recent version of Chrome or Edge.';
+   $('#deviceStatus').textContent='⚠ WebGPU not detected';
+   return;
+ }
+ try{
+   $('#modelStatus').textContent='Loading NOVA…';
+   $('#hint').textContent='NOVA is preparing its AI for the first time. Keep this tab open; the model downloads automatically.';
+   const lib=await getLibrary();
+   engine=await lib.CreateMLCEngine(id,{initProgressCallback:p=>{
+     const pct=Math.round((p.progress||0)*100);
+     $('#modelStatus').textContent='Loading '+pct+'%';
+     $('#hint').textContent=p.text||('Downloading NOVA AI model… '+pct+'%');
+   }});
+   data.model=id;save();
+   $('#modelStatus').textContent='NOVA is ready';
+   $('#hint').textContent='AI runs on this device. Your chats stay in this browser.';
+   $('#deviceStatus').textContent='✓ NOVA AI ready';
+ }catch(e){
+   engine=null;
+   $('#modelStatus').textContent='Could not load AI';
+   $('#hint').textContent='NOVA could not start its AI model: '+e.message+' Refresh the page to try again.';
+   $('#deviceStatus').textContent='⚠ AI model failed to load';
+ }
+}
+async function send(text){text=text.trim();if(!text||generating)return;if(!engine){toast('NOVA is still loading. Please wait.');return}const c=current()||(()=>{newChat();return current()})();if(!c.messages.length)c.title=text.slice(0,42);c.messages.push({role:'user',content:text});save();renderChat();const answer=addMsg('assistant','');const memoryText=(data.memories||[]).length?'\\nRemembered facts about the user (stored locally):\\n'+data.memories.join('\\n') : '';const history=[{role:'system',content:'You are NOVA, a helpful personal AI. Be clear, accurate, friendly, and age-appropriate. The user values simple explanations.'+memoryText},...c.messages.map(m=>({role:m.role,content:m.content}))];generating=true;$('#send').disabled=true;$('#hint').textContent='NOVA is thinking on your device…';try{const stream=await engine.chat.completions.create({messages:history,stream:true,temperature:0.7,max_tokens:700});let reply='';for await(const part of stream){reply+=part.choices?.[0]?.delta?.content||'';answer.textContent=reply;$('#content').scrollTop=$('#content').scrollHeight}c.messages.push({role:'assistant',content:reply});save()}catch(e){answer.textContent='Something went wrong: '+e.message}finally{generating=false;$('#send').disabled=!engine;$('#hint').textContent='Your messages stay on this device. AI runs locally in your browser.';$('#content').scrollTop=$('#content').scrollHeight}}
 function showMemory(){modal('NOVA memory','<p class="muted">These notes are stored only in this browser and included in future chats.</p><textarea id="memText" rows="5" placeholder="Add facts you want NOVA to remember">'+(data.memories||[]).join('\n')+'</textarea>','<button class="primary" id="saveMemory">Save memory</button>');$('#saveMemory').onclick=()=>{data.memories=$('#memText').value.split('\n').map(x=>x.trim()).filter(Boolean);save();closeModal();toast('Memory saved on this device')}}
 function showSettings(){modal('Settings & privacy','<p class="muted">NOVA runs its language model in your browser. Chat history, memory and settings are stored in this browser only. They do not automatically sync to your other devices. Clearing browser data may erase them.</p><p class="muted">The website loads its app code and model files from online sources. Once the model and app are cached, chat can work offline. Do not store passwords or sensitive personal information here.</p><button class="secondary" id="exportData">Export my chats (JSON)</button> <button class="secondary" id="clearData">Clear all local chats and memory</button>');$('#exportData').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download='nova-chats.json';a.click();URL.revokeObjectURL(a.href)};$('#clearData').onclick=()=>{if(confirm('Delete all chats and memory saved in this browser?')){data.chats=[];data.memories=[];data.current=null;save();closeModal();renderChat()}}}
 $('#composer').addEventListener('submit',e=>{e.preventDefault();const v=$('#prompt').value;$('#prompt').value='';$('#prompt').style.height='auto';send(v)});
 $('#prompt').addEventListener('input',()=>{$('#prompt').style.height='auto';$('#prompt').style.height=Math.min($('#prompt').scrollHeight,180)+'px';$('#send').disabled=!$('#prompt').value.trim()});
-$('#newChat').onclick=newChat;$('#modelsBtn').onclick=$('#topModels').onclick=showModels;$('#memoryBtn').onclick=showMemory;$('#settingsBtn').onclick=showSettings;$('#menuBtn').onclick=()=>$('#sidebar').classList.toggle('open');$('#modalBack').onclick=e=>{if(e.target===$('#modalBack'))closeModal()};
+$('#newChat').onclick=newChat;$('#memoryBtn').onclick=showMemory;$('#settingsBtn').onclick=showSettings;$('#menuBtn').onclick=()=>$('#sidebar').classList.toggle('open');$('#modalBack').onclick=e=>{if(e.target===$('#modalBack'))closeModal()};
 if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
 load();if(!data.current||!data.chats.some(c=>c.id===data.current)){if(data.chats[0])data.current=data.chats[0].id}renderList();renderChat();
 $('#deviceStatus').textContent=webgpuOK()?'✓ WebGPU available':'⚠ WebGPU not detected';
-if(data.model)$('#modelStatus').textContent='Saved: '+data.model;
+if(data.model)$('#modelStatus').textContent='Starting NOVA…';
 if(!webgpuOK())$('#hint').textContent='WebGPU is required for local AI. Try a recent Chrome or Edge browser on a supported device.';
-if(data.memories?.length) { /* memory is intentionally local; system context is added below when sending */ }
+if(data.memories?.length) { /* local memory is included with each chat */ }\nif(webgpuOK()) loadModel();
 </script>
 </body></html>
