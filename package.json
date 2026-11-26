@@ -1,0 +1,12 @@
+{
+  "name": "nova-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Private local AI chat assistant",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}
