@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: nova-ai
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: HF_MODEL
+        value: Qwen/Qwen3-4B:cheapest
+      - key: HF_TOKEN
+        sync: false
